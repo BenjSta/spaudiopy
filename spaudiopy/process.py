@@ -63,15 +63,13 @@ def resample_hrirs(hrir_l, hrir_r, fs_hrir, fs_target, jobs_count=1):
     """
     if jobs_count is None:
         jobs_count = multiprocessing.cpu_count()
-    print('Resample HRTFs')
     hrir_l_resampled = np.zeros([hrir_l.shape[0],
                                  int(hrir_l.shape[1] * fs_target / fs_hrir)])
     hrir_r_resampled = np.zeros_like(hrir_l_resampled)
 
     if jobs_count == 1:
-        for i, (l, r) in enumerate(zip(hrir_l, hrir_r)):
-            hrir_l_resampled[i, :] = resampy.resample(l, fs_hrir, fs_target)
-            hrir_r_resampled[i, :] = resampy.resample(r, fs_hrir, fs_target)
+        hrir_l_resampled = resampy.resample(hrir_l, fs_hrir, fs_target, axis=1)
+        hrir_r_resampled = resampy.resample(hrir_r, fs_hrir, fs_target, axis=1)
     elif jobs_count > 1:
         print("Using %i processes..." % jobs_count)
         with multiprocessing.Pool(processes=jobs_count) as pool:
@@ -86,37 +84,6 @@ def resample_hrirs(hrir_l, hrir_r, fs_hrir, fs_target, jobs_count=1):
 
     fs_hrir = fs_target
     return hrir_l_resampled, hrir_r_resampled, fs_hrir
-
-
-def haversine_dist(azi1, colat1, azi2, colat2):
-    """
-    Calculate the great circle distance between two points on the sphere.
-
-    Parameters
-    ----------
-    azi1 : (n,) array_like
-    colat1 : (n,) array_like.
-    azi2 : (n,) array_like
-    colat2: (n,) array_like
-
-    Returns
-    -------
-    c : (n,) array_like
-        Haversine distance between pairs of points.
-    """
-    lat1 = np.pi / 2 - colat1
-    lat2 = np.pi / 2 - colat2
-
-    dlon = azi2 - azi1
-    dlat = lat2 - lat1
-
-    haversin_A = np.sin(dlat / 2) ** 2
-    haversin_B = np.sin(dlon / 2) ** 2
-
-    haversin_alpha = haversin_A + np.cos(lat1) * np.cos(lat2) * haversin_B
-
-    c = 2 * np.arcsin(np.sqrt(haversin_alpha))
-    return c
 
 
 def match_loudness(sig_in, sig_target):
@@ -248,6 +215,12 @@ def frac_octave_filterbank(n, N_out, fs, f_low, f_high=None, mode='energy',
 
     Notes
     -----
+    This filterbank is originally designed such that the sum of gains squared
+    sums to unity. The alternative 'amplitude' mode ensures that the gains sum
+    directly to unity.
+
+    References
+    ----------
     Antoni, J. (2010). Orthogonal-like fractional-octave-band filters.
     The Journal of the Acoustical Society of America, 127(2), 884–895.
 
@@ -323,17 +296,10 @@ def frac_octave_filterbank(n, N_out, fs, f_low, f_high=None, mode='energy',
         for l_i in range(l):
             phi = np.sin(np.pi / 2 * phi)
 
-        if mode == 'energy':
-            # shift phi to [0, 1]
-            phi = 0.5 * (phi + 1)
-            a = np.sin(np.pi / 2 * phi)
-            b = np.cos(np.pi / 2 * phi)
-
-        if mode in ['amplitude', 'pressure']:
-            # This is not part of Antony (2010)
-            a = np.sin(np.pi / 2 * phi)
-            a = 0.5 * (a + 1)
-            b = 1 - a
+        # shift phi to [0, 1]
+        phi = 0.5 * (phi + 1)
+        a = np.sin(np.pi / 2 * phi)
+        b = np.cos(np.pi / 2 * phi)
 
         # Hi
         g[b_idx, k_i[b_idx] - P[b_idx]: k_i[b_idx] + P[b_idx] + 1] = b
@@ -341,6 +307,14 @@ def frac_octave_filterbank(n, N_out, fs, f_low, f_high=None, mode='energy',
         # Lo
         g[b_idx + 1, k_i[b_idx] - P[b_idx]: k_i[b_idx] + P[b_idx] + 1] = a
         g[b_idx + 1, : k_i[b_idx] - P[b_idx]] = 0.
+
+    if mode in ['energy']:
+        g = g
+    elif mode in ['amplitude', 'pressure']:
+        # This is not part of Antony (2010), see 'notes'
+        g = g**2
+    else:
+        raise ValueError("Mode not implemented: " + mode)
 
     # Corresponding frequency limits
     ff = np.c_[f_lo, f_c, f_hi]
@@ -424,3 +398,61 @@ def gain_clipping(gain, threshold):
     gain = gain / threshold  # offset by threshold
     gain[gain > 1] = 1 + np.tanh(gain[gain > 1] - 1)  # soft clipping to 2
     return gain * threshold
+
+
+def pulsed_noise(t_noise, t_pause, fs, reps=10, t_fade=0.02, pink_noise=True,
+                 normalize=True):
+    """Pulsed noise train, pink or white.
+
+    Parameters
+    ----------
+    t_noise : float
+        t in s for pulse.
+    t_pause : float
+        t in s between pulses.
+    fs : int
+        Sampling frequency.
+    reps : int, optional
+        Repetitions (independent). The default is 10.
+    t_fade : float, optional
+        t in s for fade in and out. The default is 0.02.
+    pink_noise : bool, optional
+        Use 'pink' (1/f) noise. The default is True
+    normalize : bool, optional
+        Normalize output. The default is True.
+
+    Returns
+    -------
+    s_out : array_like
+        output signal.
+
+    """
+    s_out = []
+
+    for _ in range(reps):
+        s_noise = np.random.randn(int(fs*t_noise))
+
+        if pink_noise:
+            X = np.fft.rfft(s_noise)
+            nbins = len(X)
+            # divide by sqrt(n), power spectrum
+            X_pink = X / np.sqrt(np.arange(nbins)+1)
+            s_noise = np.fft.irfft(X_pink)
+
+        s_pause = np.zeros(int(fs*t_noise))
+
+        # fades
+        mask_n = int(fs*t_fade)
+        mask_in = np.sin(np.linspace(0, np.pi/2, mask_n))**2
+        mask_out = np.cos(np.linspace(0, np.pi/2, mask_n))**2
+
+        # apply
+        s_noise[:mask_n] *= mask_in
+        s_noise[-mask_n:] *= mask_out
+
+        s_out = np.r_[s_out, s_noise, s_pause]
+
+    if normalize:
+        s_out /= np.max(abs(s_out))
+
+    return s_out

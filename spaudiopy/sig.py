@@ -14,11 +14,16 @@ Avoid code duplications (and errors) by defining a few custom classes here.
 """
 
 import copy
+from warnings import warn
 
 import numpy as np
 from scipy import signal as scysig
 import soundfile as sf
-import sounddevice as sd
+try:
+    import sounddevice as sd
+except (ImportError, OSError) as e:
+    print(str(e))
+    warn("Sounddevice not available.")
 
 from . import utils, IO, sph
 from . import process as pcs
@@ -230,7 +235,7 @@ class HRIRs:
         grid_phi = self.grid['azi'].values
         grid_theta = self.grid['colat'].values
         # search closest gridpoint
-        d_idx = np.argmin(pcs.haversine_dist(grid_phi, grid_theta, phi, theta))
+        d_idx = np.argmin(utils.haversine(grid_phi, grid_theta, phi, theta))
         VERBOSE = False
         if VERBOSE:
             with open("selected_hrtf.txt", "a") as f:
@@ -259,7 +264,7 @@ class HRIRs:
         """
         grid_phi = self.grid['azi'].values
         grid_theta = self.grid['colat'].values
-        return np.argmin(pcs.haversine_dist(grid_phi, grid_theta, phi, theta))
+        return np.argmin(utils.haversine(grid_phi, grid_theta, phi, theta))
 
 
 def trim_audio(A, start, stop):

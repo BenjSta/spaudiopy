@@ -1,6 +1,7 @@
 # spaudiopy
  [![Documentation Status](https://readthedocs.org/projects/spaudiopy/badge/?version=latest)](https://spaudiopy.readthedocs.io/en/latest/?badge=latest)
  [![PyPI version](https://badge.fury.io/py/spaudiopy.svg)](https://pypi.org/project/spaudiopy/)
+![Cross-Platform Test](https://github.com/chris-hld/spaudiopy/workflows/Cross-Platform%20Test/badge.svg)
 
 Spatial Audio Python Package.
 
@@ -25,7 +26,7 @@ You can simply install via pip:
 Or if you want to go into detail and install from source:
 
 1. Create a conda environment, called e.g. 'spaudio':  
-  `conda create --name spaudio python=3.6 anaconda joblib portaudio`
+  `conda create --name spaudio python=3.6 anaconda portaudio`
 2. Activate this new environment:  
   `conda activate spaudio`
   

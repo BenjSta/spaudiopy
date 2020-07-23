@@ -15,8 +15,8 @@
 import numpy as np
 
 import matplotlib.pyplot as plt
-from matplotlib import cm, colors
-from mpl_toolkits.mplot3d import Axes3D  # for (projection='3d')
+from matplotlib import cm, colors, tri
+from mpl_toolkits.mplot3d import Axes3D  # noqa: F401 unused import
 
 from . import utils
 from . import sph
@@ -191,7 +191,57 @@ def compare_ambi(Ambi_A, Ambi_B):
     plt.title('B-format')
 
 
-def sph_coeffs(F_nm, SH_type=None, azi_steps=5, el_steps=3, title=None):
+def spherical_function(f, azi, colat, title=None):
+    """Plot function 1D vector f over azi and colat."""
+    f = utils.asarray_1d(np.real_if_close(f))
+    azi = utils.asarray_1d(azi)
+    colat = utils.asarray_1d(colat)
+    x, y, z = utils.sph2cart(azi, colat, r=abs(f))
+
+    # triangulate in the underlying parametrization
+    triang = tri.Triangulation(colat, azi)
+
+    fig = plt.figure()
+    ax = fig.gca(projection='3d')
+    p_tri = ax.plot_trisurf(x, y, z,
+                            cmap=plt.cm.coolwarm,
+                            # antialiased=False,
+                            triangles=triang.triangles, shade=True,
+                            edgecolor='none', linewidth=0.06, alpha=0.25)
+
+    # Draw axis lines
+    x0 = np.array([1, 0, 0])
+    y0 = np.array([0, 1, 0])
+    z0 = np.array([0, 0, 1])
+    for i in range(3):
+        ax.plot([-x0[i], x0[i]], [-y0[i], y0[i]], [-z0[i], z0[i]], 'k',
+                alpha=0.3)
+
+    # overlay data points, radius as color
+    p_sc = ax.scatter(x, y, z, c=f, cmap=plt.cm.viridis,
+                      vmin=np.min([0, f.min()]),
+                      vmax=np.max([1, f.max()]))
+
+    ax.set_xlim(-1, 1)
+    ax.set_ylim(-1, 1)
+    ax.set_zlim(-1, 1)
+
+    ax.set_xlabel('x')
+    ax.set_ylabel('y')
+    ax.set_zlabel('z')
+    ax.locator_params(nbins=5)
+
+    cbar = plt.colorbar(p_sc, ax=ax, shrink=0.5, aspect=10)
+    cbar.set_label(r"$f\,(\Omega)$")
+
+    plt.grid(True)
+    ax.set_aspect('equal')
+    ax.view_init(25, 230)
+    if title is not None:
+        plt.title(title)
+
+
+def sh_coeffs(F_nm, SH_type=None, azi_steps=5, el_steps=3, title=None):
     """Plot spherical harmonics coefficients as function on the sphere."""
     F_nm = utils.asarray_1d(F_nm)
     F_nm = F_nm[:, np.newaxis]
@@ -242,8 +292,10 @@ def sph_coeffs(F_nm, SH_type=None, azi_steps=5, el_steps=3, title=None):
     ax.set_xlabel('x')
     ax.set_ylabel('y')
     ax.set_zlabel('z')
+    ax.locator_params(nbins=5)
 
-    cb = plt.colorbar(m, ticks=[-np.pi, 0, np.pi], shrink=0.3, aspect=8)
+    cb = plt.colorbar(m, ticks=[-np.pi, 0, np.pi], shrink=0.5, aspect=10)
+    cb.set_label("Phase in rad")
     cb.set_ticklabels([r'$-\pi$', r'$0$', r'$\pi$'])
 
     plt.grid(True)
@@ -251,11 +303,10 @@ def sph_coeffs(F_nm, SH_type=None, azi_steps=5, el_steps=3, title=None):
     ax.view_init(25, 230)
     if title is not None:
         plt.title(title)
-    # fig.tight_layout()
 
 
-def subplot_sph_coeffs(F_l, SH_type=None, azi_steps=5, el_steps=3, title=None):
-    """Plot spherical harmonics coefficients as function on the sphere."""
+def sh_coeffs_subplot(F_l, SH_type=None, azi_steps=5, el_steps=3, titles=None):
+    """Plot spherical harmonics coefficients list as function on the sphere."""
     N_plots = len(F_l)
     azi_steps = np.deg2rad(azi_steps)
     el_steps = np.deg2rad(el_steps)
@@ -264,7 +315,8 @@ def subplot_sph_coeffs(F_l, SH_type=None, azi_steps=5, el_steps=3, title=None):
                                        np.arange(10e-3, np.pi + el_steps,
                                                  el_steps))
 
-    fig = plt.figure(figsize=plt.figaspect(1 / N_plots))
+    fig = plt.figure(figsize=plt.figaspect(1 / N_plots),
+                     constrained_layout=True)
     ax_l = []
     for i_p, ff in enumerate(F_l):
         F_nm = utils.asarray_1d(ff)
@@ -298,20 +350,29 @@ def subplot_sph_coeffs(F_l, SH_type=None, azi_steps=5, el_steps=3, title=None):
         ax.set_ylim(-1, 1)
         ax.set_zlim(-1, 1)
 
+        # Draw axis lines
+        x0 = np.array([1, 0, 0])
+        y0 = np.array([0, 1, 0])
+        z0 = np.array([0, 0, 1])
+        for i in range(3):
+            ax.plot([-x0[i], x0[i]], [-y0[i], y0[i]], [-z0[i], z0[i]], 'k',
+                    alpha=0.3)
+
         if i_p == 0:
             ax.set_xlabel('x')
             ax.set_ylabel('y')
             ax.set_zlabel('z')
 
+        ax.locator_params(nbins=3)
         plt.grid(True)
         ax.view_init(25, 230)
-        if title is not None:
-            ax.set_title(title[i_p])
+        if titles is not None:
+            ax.set_title(titles[i_p])
         ax.set_aspect('equal')
         ax_l.append(ax)
 
-    cbar = plt.colorbar(m, shrink=0.3, aspect=8,
-                        ax=ax_l)
+    cbar = plt.colorbar(m, shrink=0.33, aspect=3,
+                        ax=ax_l, orientation='horizontal')
     cbar.set_ticks([-np.pi, 0, np.pi])
     cbar.set_ticklabels([r'$-\pi$', r'$0$', r'$\pi$'])
 
@@ -345,7 +406,7 @@ def hull(hull, simplices=None, mark_invalid=True, title=None, lim_m=1,
             valid_s = simplices
         else:
             is_valid_s = np.array([hull.is_simplex_valid(s)
-                                  for s in simplices])
+                                   for s in simplices])
             valid_s = simplices[is_valid_s]
             invalid_s = simplices[~is_valid_s]
             if np.all(is_valid_s):
@@ -464,25 +525,28 @@ def hull_normals(hull, plot_face_normals=True, plot_vertex_normals=True):
     ax.view_init(25, 230)
 
 
-def polar(theta, a, title=None, rlim=(-40, 0), ax=None):
-    """Polar plot that allows negative values for 'a'."""
+def polar(theta, r, title=None, rlim=(-40, 0), ax=None):
+    """Polar plot in dB that allows negative values for 'r'."""
     if ax is None:
         fig = plt.figure()
         ax = fig.gca(projection='polar')
-    ax.plot(theta, utils.db(np.clip(a, 0, None)), label='pos')
-    ax.plot(theta, utils.db(abs(np.clip(a, None, 0))), label='neg')
+    ax.plot(theta, utils.db(np.clip(r, 0, None)), label='$+$')
+    ax.plot(theta, utils.db(abs(np.clip(r, None, 0))), label='$-$')
     ax.set_rmin(rlim[0])
     ax.set_rmax(rlim[1])
     ax.set_rticks(np.linspace(rlim[0], rlim[1], 5))
+    ax.text(np.pi/8, 5, 'dB', horizontalalignment='left')
     plt.legend(loc='lower right')
     if title is not None:
         plt.title(title)
 
 
 def decoder_performance(hull, renderer_type, azi_steps=5, ele_steps=3,
-                        show_ls=True, **kwargs):
-    """Currently shows rE_mag, E and spread measures on grid.
-    For renderer_type='VBAP', 'VBIP', 'ALLRAP' or 'NLS', kwargs forwarded.
+                        show_ls=True, title=None, **kwargs):
+    """Shows energy, spread and angular error measures on grid.
+    For renderer_type={'VBAP', 'VBIP', 'ALLRAP', 'NLS'},
+    as well as {'ALLRAD', 'ALLRAD2', 'EPAD', 'MAD'}.
+    All kwargs are forwarded to the decoder function.
 
     Zotter, F., & Frank, M. (2019). Ambisonics.
     Springer Topics in Signal Processing.
@@ -494,6 +558,15 @@ def decoder_performance(hull, renderer_type, azi_steps=5, ele_steps=3,
     phi_plot, theta_plot = np.meshgrid(phi_vec, theta_vec)
     _grid_x, _grid_y, grid_z = utils.sph2cart(phi_plot.ravel(),
                                               theta_plot.ravel())
+
+    # Prepare for SH based rendering
+    if renderer_type.lower() in ['allrad', 'allrad2', 'epad', 'mad']:
+        if 'N_sph' in kwargs:
+            N_sph = kwargs.pop('N_sph')
+        else:
+            N_sph = hull.get_characteristic_order()
+        Y_in = sph.sh_matrix(N_sph, phi_plot.flatten(), theta_plot.flatten(),
+                             SH_type='real').T
 
     # Switch renderer
     if renderer_type.lower() == 'vbap':
@@ -509,15 +582,26 @@ def decoder_performance(hull, renderer_type, azi_steps=5, ele_steps=3,
     elif renderer_type.lower() == 'nls':
         G = decoder.nearest_loudspeaker(np.c_[_grid_x, _grid_y, grid_z], hull,
                                         **kwargs)
+    elif renderer_type.lower() == 'allrad':
+        G = decoder.allrad(Y_in, hull, N_sph=N_sph, **kwargs).T
+    elif renderer_type.lower() == 'allrad2':
+        G = decoder.allrad2(Y_in, hull, N_sph=N_sph, **kwargs).T
+    elif renderer_type.lower() == 'epad':
+        G = decoder.epad(Y_in, hull, N_sph=N_sph, **kwargs).T
+    elif renderer_type.lower() == 'mad':
+        G = decoder.mad(Y_in, hull, N_sph=N_sph, **kwargs).T
     else:
         raise ValueError('Unknown renderer_type')
 
     # Measures
+    # Amplitude
+    A = np.sum(G, axis=1)
+    # Energy
     E = np.sum(G**2, axis=1)  # * (4 * np.pi / G.shape[1])  # (eq. 15)
     # project points onto unit sphere
     ls_points = hull.points / hull.d[:, np.newaxis]
     rE, rE_mag = sph.r_E(ls_points, G / hull.d[np.newaxis, :] ** hull.a)
-    # Zotter book (eq. 2.11) adds 5/8
+    # Zotter book (eq. 2.11) adds factor 5/8
     spread = 2 * np.arccos(np.clip(rE_mag, 0, 1)) * 180 / np.pi
     # angular error
     col_dot = np.einsum('ij,ij->i', np.array([_grid_x, _grid_y, grid_z]).T,
@@ -525,17 +609,17 @@ def decoder_performance(hull, renderer_type, azi_steps=5, ele_steps=3,
     ang_error = np.rad2deg(np.arccos(np.clip(col_dot, -1.0, 1.0)))
 
     # Show them
-    fig, axes = plt.subplots(1, 3, sharex='all', sharey='all',
-                             figsize=(10, 2.2))  # works for nb
-    for ip, _data in enumerate([E, spread, ang_error]):
+    fig, axes = plt.subplots(2, 2, sharex='all', sharey='all')
+    axes = axes.ravel()
+    for ip, _data in enumerate([A, E, spread, ang_error]):
         _data = _data.reshape(phi_plot.shape)
         ax = axes[ip]
         ax.set_aspect('equal')
         # draw mesh, value corresponds to center of mesh
         p = ax.pcolormesh(phi_plot-azi_steps/2, theta_plot-ele_steps/2,
-                          _data, vmin=0, vmax=90 if ip == 1 or ip == 2
-                          else np.max([1.0, np.max(_data)]))
-        # draw loudspeakers
+                          _data, vmin=0, vmax=np.max([1.0, np.max(_data)])
+                          if ip in [0, 1] else 90)
+
         if show_ls:
             for s, co in enumerate(ls_points):
                 # map to pixels grid
@@ -555,22 +639,30 @@ def decoder_performance(hull, renderer_type, azi_steps=5, ele_steps=3,
         cbar = fig.colorbar(p, ax=ax, fraction=0.024, pad=0.04)
         cbar.outline.set_linewidth(0.5)
         if ip == 0:
-            ax.set_xlabel('Azimuth')
-            ax.set_ylabel('Colatitude')
+            ax.set_title(r'$A$')
+            cbar.set_ticks([0, 0.5, np.max([1.0, np.max(_data)])])
+        if ip == 1:
             ax.set_title(r'$E$')
             cbar.set_ticks([0, 0.5, np.max([1.0, np.max(_data)])])
-        elif ip == 1:
+        elif ip == 2:
+            ax.set_xlabel('Azimuth')
+            ax.set_ylabel('Colatitude')
+
             ax.set_title(r'$\sigma_E$')
             cbar.set_ticks([0, 45, 90])
             cbar.set_ticklabels([r'$0^{\circ}$', r'$45^{\circ}$',
                                  r'$90^{\circ}$'])
-        elif ip == 2:
+        elif ip == 3:
             ax.set_title(r'$\Delta \angle$')
             cbar.set_ticks([0, 45, 90])
             cbar.set_ticklabels([r'$0^{\circ}$', r'$45^{\circ}$',
                                  r'$90^{\circ}$'])
 
-    plt.suptitle(renderer_type)
+    if title is None:
+        title = renderer_type
+    else:
+        title = renderer_type + ', ' + str(title)
+    plt.suptitle(title)
     plt.subplots_adjust(wspace=0.25)
 
 
@@ -589,7 +681,7 @@ def doa(azi, colat, fs, p=None, size=300):
     else:
         s_plot = np.ones_like(azi)
 
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(constrained_layout=True)
     ax.set_aspect('equal')
 
     # plot in reverse order so that first reflections are on top
@@ -599,9 +691,14 @@ def doa(azi, colat, fs, p=None, size=300):
     ax.set_ylabel("Elevation in rad")
     ax.set_xticks([-np.pi, -np.pi/2, 0, np.pi/2, np.pi])
     ax.set_xticklabels([r'$-\pi$', r'$-\pi / 2$', r'$0$',
-                       r'$\pi / 2$', r'$\pi$'])
+                        r'$\pi / 2$', r'$\pi$'])
     ax.set_yticks([-np.pi/2, 0, np.pi/2])
     ax.set_yticklabels([r'$-\pi / 2$', r'$0$', r'$\pi / 2$'])
 
-    cbar = plt.colorbar(p)
+    # show t as colorbar
+    cbar = plt.colorbar(p, ax=ax, orientation='horizontal')
     cbar.set_label("t in ms")
+
+    # produce a legend with a cross section of sizes from the scatter
+    # handles, labels = p.legend_elements(prop="sizes", alpha=0.6)
+    # ax.legend(handles, labels, loc="upper right", title="Sizes")

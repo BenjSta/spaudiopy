@@ -92,6 +92,43 @@ def angle_between(v1, v2, vi=None):
     return np.arccos(np.clip(a, -1.0, 1.0))
 
 
+def haversine(azi1, colat1, azi2, colat2, r=1):
+    """Calculate the spherical distance between two points on the sphere.
+    The spherical distance is central angle for r=1.
+
+    Parameters
+    ----------
+    azi1 : (n,) array_like
+    colat1 : (n,) array_like.
+    azi2 : (n,) array_like
+    colat2: (n,) array_like
+    r : float, optional.
+
+    Returns
+    -------
+    c : (n,) array_like
+        Haversine distance between pairs of points.
+
+    Reference
+    ---------
+    https://en.wikipedia.org/wiki/Haversine_formula
+
+    """
+    lat1 = np.pi / 2 - colat1
+    lat2 = np.pi / 2 - colat2
+
+    dlon = azi2 - azi1
+    dlat = lat2 - lat1
+
+    haversin_A = np.sin(dlat / 2) ** 2
+    haversin_B = np.sin(dlon / 2) ** 2
+
+    haversin_alpha = haversin_A + np.cos(lat1) * np.cos(lat2) * haversin_B
+
+    c = 2 * r * np.arcsin(np.sqrt(haversin_alpha))
+    return c
+
+
 def area_triangle(p1, p2, p3):
     """calculate area of any triangle given coordinates of its corners p."""
     return 0.5 * np.linalg.norm(np.cross((p2 - p1), (p3 - p1)))
@@ -153,18 +190,20 @@ def stack(vector_1, vector_2):
     return np.squeeze(out)
 
 
-def test_diff(v1, v2, msg=None, VERBOSE=True):
-    """Test if the cumulative element-wise difference between v1 and v2
-    is greater 10-e8.
+def test_diff(v1, v2, msg=None, axis=None, test_lim=10e-8, VERBOSE=True):
+    """Test if the cumulative element-wise difference between v1 and v2.
+    Return difference and be verbose if is greater `test_lim`.
     """
-    d = np.sum(np.abs(v1.ravel() - v2.ravel()))
+    v1 = np.asarray(v1)
+    v2 = np.asarray(v2)
+    d = np.sum(np.abs(v1.ravel() - v2.ravel()), axis=axis)  # None is all
     if VERBOSE:
         if msg is not None:
             print(msg, '--', end=' ')
-        if np.any(d > 10e-8):
+        if np.any(d > test_lim):
             print('Diff: ', d)
         else:
-            print('Close enough')
+            print('Close enough.')
     return d
 
 
