@@ -180,7 +180,8 @@ class LoudspeakerSetup:
             :context: close-figs
 
             ls_setup.ambisonics_setup(update_hull=True)
-            ls_setup.ambisonics_hull.show(title='Ambisonic Hull')
+            N_e = ls_setup.get_characteristic_order()
+            ls_setup.ambisonics_hull.show(title=f"Ambisonic Hull ($N_e={N_e}$)")
 
         """
         self.characteristic_order = self.get_characteristic_order()
@@ -872,6 +873,18 @@ def allrad(F_nm, hull, N_sph=None, jobs_count=1):
     Zotter, F., & Frank, M. (2012). All-Round Ambisonic Panning and Decoding.
     Journal of Audio Engineering Society, Sec. 6.
 
+    Examples
+    --------
+    .. plot::
+        :context: close-figs
+
+        ls_setup = spa.decoder.LoudspeakerSetup(ls_x, ls_y, ls_z)
+        ls_setup.pop_triangles(normal_limit=85, aperture_limit=90,
+                               opening_limit=150)
+        ls_setup.ambisonics_setup(update_hull=True)
+
+        spa.plots.decoder_performance(ls_setup, 'ALLRAD')
+
     """
     if hull.ambisonics_hull:
         ambisonics_hull = hull.ambisonics_hull
@@ -1009,6 +1022,18 @@ def mad(F_nm, hull, N_sph=None):
     ch. 4.9.2, Zotter, F., & Frank, M. (2019). Ambisonics.
     Springer Topics in Signal Processing.
 
+    Examples
+    --------
+    .. plot::
+        :context: close-figs
+
+        ls_setup = spa.decoder.LoudspeakerSetup(ls_x, ls_y, ls_z)
+        ls_setup.pop_triangles(normal_limit=85, aperture_limit=90,
+                               opening_limit=150)
+        ls_setup.ambisonics_setup(update_hull=True)
+
+        spa.plots.decoder_performance(ls_setup, 'MAD', N_sph=3)
+
     """
     if N_sph is None:
         if hull.characteristic_order:
@@ -1055,6 +1080,19 @@ def epad(F_nm, hull, N_sph=None):
     ----------
     Zotter, F., Pomberger, H., & Noisternig, M. (2012). Energy-preserving
     ambisonic decoding. Acta Acustica United with Acustica, 98(1), 37–47.
+
+
+    Examples
+    --------
+    .. plot::
+        :context: close-figs
+
+        ls_setup = spa.decoder.LoudspeakerSetup(ls_x, ls_y, ls_z)
+        ls_setup.pop_triangles(normal_limit=85, aperture_limit=90,
+                               opening_limit=150)
+        ls_setup.ambisonics_setup(update_hull=True)
+
+        spa.plots.decoder_performance(ls_setup, 'EPAD', N_sph=3)
 
     """
     if N_sph is None:
